@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <title>{{ task_name }}</title>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            $('#question-form').submit(function(event) {
+                event.preventDefault();
+                $.ajax({
+                    type: 'POST',
+                    url: '/generate_questions',
+                    data: $(this).serialize(),
+                    success: function(response) {
+                        $('#questions').empty();
+                        response.questions.forEach(function(question, index) {
+                            const optionsArray = [
+    { optionID: "1", choice: "hello" },
+    { optionID: "2", choice: "world" },
+    { optionID: "3", choice: "foo" },
+    { optionID: "4", choice: "bar" },
+    { optionID: "5", choice: "example" }
+];
+                            const optionsHTML = optionsArray.map(option => {
+            return `
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="${index}" id="${option.optionID}">
+                    <label class="form-check-label" for="${option.optionID}">
+                        ${option.choice}
+                    </label>
+                </div>
+            `;
+        }).join('');
+
+                            $('#questions').append(`<div class="m-3">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title">${question}</h5>
+            <p class="card-text">
+        ${optionsHTML}
+</p>
+          </div>
+        </div>
+      </div>`);
+                        });
+                    }
+                });
+            });
+        });
+    </script>
+</head>
+<body class="bg-dark text-white p-3 m-0 border-0 bd-example m-0 border-0">
+{% if lecturer_message %}
+<div>
+    <h2>Lecturer Message:</h2>
+    <p>{{ lecturer_message }}</p>
+</div>
+{% endif %}
+
+{% if programming_language %}
+<div>
+    <h3>Programming Language: {{ programming_language }}</h3>
+</div>
+{% endif %}
+
+<form class="row g-3" id="question-form">
+
+    <div>
+        <label for="codeTextArea" class="form-label"><h2>Your Code</h2></label>
+      <textarea class="form-control" id="codeTextArea" name="code_snippet" rows="5" required></textarea>
+        <div class="invalid-feedback">
+            Please add your code to generate questions.
+        </div>
+
+    </div>
+
+    <div class="alert alert-danger d-flex align-items-center" role="alert">
+
+      <div>
+        Warning: You can only submit your code once per task!
+      </div>
+    </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" value="" id="added_code" required>
+          <label class="form-check-label" for="added_code">
+            I have added the code I want to submit
+          </label>
+        </div>
+
+    <div>
+        <button class="btn btn-primary" type="submit">Submit form</button>
+      </div>
+</form>
+
+<div class="card">
+  <div class="card-header">
+    Generated Questions
+  </div>
+  <div class="column" id="questions">
+
+      <div class="m-3">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title">Special title treatment</h5>
+            <p class="card-text">With supporting text below as a natural lead-in to additional content.</p>
+            <a href="#" class="btn btn-primary">Go somewhere</a>
+          </div>
+        </div>
+      </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js" integrity="sha384-0pUGZvbkm6XF6gxjEnlmuGrJXVbNuzT9qBBavbLwCsOGabYfZo0T0to5eqruptLy" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+
+</body>
+</html>
