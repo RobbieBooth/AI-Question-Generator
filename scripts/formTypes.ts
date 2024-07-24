@@ -10,6 +10,7 @@ interface ClassInfo extends Class{
 
 export interface Question {
     ID: number,
+    answer:string,
     question:string,
     options: Option[]
 }

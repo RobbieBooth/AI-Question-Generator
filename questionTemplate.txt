@@ -1,0 +1,17 @@
+import json
+
+# Your JSON string
+json_string = {{ STUDENT_ANSWER }}
+
+__student_answer__ = """{{ ""  | e('py') }}"""
+
+SEPARATOR = "#<ab@17943918#@>#"
+
+{% for TEST in TESTCASES %}
+answer = json_string["crui_Q{{ TEST.stdin }}_answer"][0]
+student_answer = json_string["crui_Q{{ TEST.stdin }}_student_answer"][0]
+if(answer == student_answer):
+    print("CORRECT")
+else:
+    print("INCORRECT")
+{% endfor %}
