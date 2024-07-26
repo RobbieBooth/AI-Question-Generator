@@ -12,7 +12,7 @@ export interface Question {
     ID: number,
     answer:string,
     question:string,
-    options: Option[]
+    options: string[]
 }
 
 export interface Questions {

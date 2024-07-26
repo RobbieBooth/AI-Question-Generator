@@ -16,14 +16,19 @@ import {Option} from "./databaseTypes";
 $(document).ready(function() {
             $('#code-form').submit(function(event) {
                 event.preventDefault();
+                $('#crui_generate_button').prop("disabled", true);
+                $('#crui_generated_question_holder').removeClass("visually-hidden");
 $.ajax({
                     type: 'POST',
                     url: 'https://devweb2023.cis.strath.ac.uk/xbb21163-python/generate_questions',
+                    // url: '/generate_questions',
                     data: $(this).serialize(),
                     success: function(response) {
+                        $('#crui_generate_button').prop("disabled", true);
+                        $('#crui_generated_question_holder').removeClass("visually-hidden");
                         $('#questions').empty();
                         // console.log();
-                        const parsedObject = JSON.parse(response.questions)  as Question[];
+                        const parsedObject = response.questions as Question[];
                         console.log(parsedObject);
                         parsedObject.forEach((question, index)=>generate_question(question, index+1));
                     }
@@ -38,7 +43,7 @@ function generate_question(question:Question, questionNumber:number){
           <div class="card-body">
             <h5 class="card-title">${question.question}</h5>
             <p class="card-text">
-        ${generate_options(question.options, questionNumber)}
+        ${generate_options(question.options, questionNumber, question.ID)}
             </p>
           </div>
         </div>
@@ -62,13 +67,13 @@ function runFunction(value, questionNumber) {
 
 
 //TODO may be errors due to replace for backticks and double quotes etc
-function generate_options(options: Option[], questionNumber):string{
+function generate_options(options: string[], questionNumber, questionID):string{
     return options.map((option, index) => {
          return `
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="crui_Q${option.questionID}" id="crui_Q${option.questionID}_Option${option.ID}" onchange="runFunction('${option.option.replace(/'/g, "\\'")}',${questionNumber})">
-                    <label class="form-check-label" for="crui_Q${option.questionID}_Option${option.ID}">
-                        ${option.option}
+                    <input class="form-check-input" type="radio" name="crui_Q${questionID}" id="crui_Q${questionID}_Option${index}" onchange="runFunction('${option.replace(/'/g, "\\'")}',${questionNumber})">
+                    <label class="form-check-label" for="crui_Q${questionID}_Option${index}">
+                        ${option}
                     </label>
                 </div>
             `;
