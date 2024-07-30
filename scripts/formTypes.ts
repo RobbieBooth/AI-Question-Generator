@@ -10,7 +10,7 @@ interface ClassInfo extends Class{
 
 export interface Question {
     ID: number,
-    answer:string,
+    answer:string | null,
     question:string,
     options: string[]
 }
@@ -19,4 +19,9 @@ export interface Questions {
     task: Task,
     attemptID: number,
     questions: Question[]
+}
+
+export interface StudentAnswer{
+    question: Question
+    studentAnswer: string | null
 }

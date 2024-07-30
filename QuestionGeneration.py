@@ -80,6 +80,9 @@ class Question:
     def update_ID(self, ID):
         self.ID = ID
 
+    def get_ID(self):
+        return self.ID
+
     def to_student_dict(self):
         # randomise option order
         options = self.wrong_options
@@ -107,8 +110,8 @@ class Question_Bank:
         }
 
     def to_student_dict(self):
+        self.questions.sort(key=lambda question: question.get_ID())
         student_questions = [question.to_student_dict() for question in self.questions]
-        random.shuffle(student_questions)
         return student_questions
 
 
@@ -201,7 +204,10 @@ def generate_ai_questions(java_code: str):
         response_format={"type": "json_object"},
         messages=[
             {"role": "system",
-             "content": '''You are an educational assistant specializing in computer science. Your task is to analyse students' code for the beginner programmer class and generate thoughtful multiple-choice questions that can help them understand and improve their coding skills. You should try and make good distractor options to really test students understanding.
+             "content": '''
+             You are an educational assistant specializing in computer science. Your task is to analyse students' code for the beginner programmer class and 
+             generate thoughtful multiple-choice questions that can help them understand and improve their coding skills. 
+             You should try and make good distractor options to really test students understanding.
 
     You should create 8 questions, the language the user used is Java and they may tell you what methods or parts they want to assess.
     The questions should have 4 options.

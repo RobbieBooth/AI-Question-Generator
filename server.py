@@ -2,6 +2,8 @@ import os
 import random
 import site
 
+from sqlalchemy.orm import aliased
+
 vendor_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "vendor")
 site.addsitedir(vendor_path)
 
@@ -18,6 +20,7 @@ from flask import Flask, redirect, render_template, session, url_for, jsonify, r
 from flask_sqlalchemy import SQLAlchemy
 
 from sqlalchemy.sql import func
+from sqlalchemy import text
 
 from flask_cors import CORS
 
@@ -31,7 +34,8 @@ if ENV_FILE:
 app = Flask(__name__)
 app.secret_key = env.get("APP_SECRET_KEY")
 app.config['SQLALCHEMY_DATABASE_URI'] = \
-    "mysql+pymysql://" + env.get("DATABASE_USERNAME") + ":" + env.get("DATABASE_PASSWORD") + "@" + env.get("DATABASE_HOST") + ":" + env.get("DATABASE_PORT") + "/" + env.get("DATABASE_NAME")
+    "mysql+pymysql://" + env.get("DATABASE_USERNAME") + ":" + env.get("DATABASE_PASSWORD") + "@" + env.get(
+        "DATABASE_HOST") + ":" + env.get("DATABASE_PORT") + "/" + env.get("DATABASE_NAME")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Allow all origins
@@ -52,6 +56,7 @@ class StudentTaskAttempt(db.Model):
     def __repr__(self):
         return f'<Student {self.firstname}>'
 
+
 class OptionTable(db.Model):
     __tablename__ = 'optionTable'
     ID = db.Column(db.Integer, primary_key=True)
@@ -65,17 +70,20 @@ class Question(db.Model):
     Question = db.Column(db.Text, nullable=False)
     StudentAnswer = db.Column(db.Integer, db.ForeignKey('optionTable.ID'), nullable=True)
     Answer = db.Column(db.Integer, db.ForeignKey('optionTable.ID'), nullable=False)
+    this_doesnt_seem_right = db.Column(db.Boolean, nullable=False, default=False)
 
     # Define relationships
     attempt_id = db.relationship('StudentTaskAttempt', foreign_keys=[attemptID])
     student_answer_option = db.relationship('OptionTable', foreign_keys=[StudentAnswer])
     correct_answer_option = db.relationship('OptionTable', foreign_keys=[Answer])
 
+
 # Define the association table
 question_options = db.Table('questionOptions',
-    db.Column('question_id', db.Integer, db.ForeignKey('question.ID'), primary_key=True),
-    db.Column('option_id', db.Integer, db.ForeignKey('optionTable.ID'), primary_key=True)
-)
+                            db.Column('question_id', db.Integer, db.ForeignKey('question.ID'), primary_key=True),
+                            db.Column('option_id', db.Integer, db.ForeignKey('optionTable.ID'), primary_key=True)
+                            )
+
 
 # Establish relationship (optional, if you need to use backref)
 class QuestionOption(db.Model):
@@ -86,9 +94,9 @@ class QuestionOption(db.Model):
     option = db.relationship(OptionTable, backref=db.backref("question_option", cascade="all, delete-orphan"))
 
 
-# with app.app_context():
-#     db.drop_all()
-#     db.create_all()
+with app.app_context():
+    db.drop_all()
+    db.create_all()
 
 oauth = OAuth(app)
 
@@ -208,7 +216,6 @@ def add_question(attemptID, question, answer: str, wrong_options: list[str]):
         Answer=answer.ID
     )
 
-
     db.session.add(new_question)
     db.session.commit()
 
@@ -220,19 +227,18 @@ def add_question(attemptID, question, answer: str, wrong_options: list[str]):
     return new_question
 
 
-
 @app.route('/generate_questions', methods=['POST'])
 def generate_questions_route():
     code_snippet = request.form.get('code_snippet')
-    student_attempt = save_student_attempt(None, code_snippet)
+    student_attempt = save_student_attempt(request.form.get('crui_username'), code_snippet)
     # questions = generate_questions(code_snippet)
     questions = generate_ai_questions(code_snippet)
     for question in questions.questions:
-
-        new_question = add_question(student_attempt.ID, question.question, question.answer_option, question.wrong_options)
+        new_question = add_question(student_attempt.ID, question.question, question.answer_option,
+                                    question.wrong_options)
         question.update_ID(new_question.ID)
     student_questions = questions.to_student_dict()
-    return jsonify(questions=student_questions)
+    return jsonify(questions=student_questions, attempt_id=student_attempt.ID)
 
 
 def generate_questions(code_snippet):
@@ -301,6 +307,47 @@ def generate_questions(code_snippet):
 @app.route("/")
 def home():
     return render_template("home.html", session=session.get('user'), pretty=json.dumps(session.get('user'), indent=4))
+
+
+# Save the students answer to the attempt based on the attemptID
+#
+@app.route('/saveanswers/<int:id>', methods=['POST'])
+def saveanswers(id):
+    # Get JSON data from the request
+    studentAnswers = request.get_json()
+
+    query = """
+    UPDATE `question` AS q
+    SET q.studentanswer = (
+        SELECT ID FROM `optionTable` as OT
+        LEFT JOIN `questionOption` as QO ON OT.ID = QO.option_id
+        WHERE QO.question_id = :question_id AND OT.optionText = :answerText
+        LIMIT 1
+    )
+    WHERE q.ID = :question_id;
+    """
+
+    query_for_not_right = """
+    UPDATE `question` as q
+    SET q.this_doesnt_seem_right = true
+    WHERE q.ID = :question_id;
+    """
+
+    # Execute the raw SQL query
+    for answer in studentAnswers:
+        if(answer['studentAnswer'] == "This question doesn't seem right?"):
+            db.session.execute(text(query_for_not_right),{'question_id': answer['question']['ID']})
+        db.session.execute(text(query),
+                           {'question_id': answer['question']['ID'], 'answerText': answer['studentAnswer']})
+
+    query_questions_correct = """
+    UPDATE `student_task_attempt` SET questionsCorrect = (SELECT COUNT(*) as correct FROM `question` WHERE StudentAnswer = Answer AND attemptID = :attempt_id) WHERE ID = :attempt_id; 
+    """
+    db.session.execute(text(query_questions_correct), {'attempt_id': id});
+    # Commit the transaction
+    db.session.commit()
+
+    return {'status': 'success'}
 
 # if __name__ == "__main__":
 #     app.run(host="0.0.0.0", port=env.get("PORT", 3000))
