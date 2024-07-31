@@ -1,9 +1,14 @@
 {
+  "type": "module",
   "dependencies": {
+    "@babel/core": "^7.25.2",
+    "@babel/parser": "^7.25.3",
+    "@babel/types": "^7.25.2",
     "jquery": "^3.7.1"
   },
   "devDependencies": {
     "@types/jquery": "^3.5.30",
+    "@types/node": "^22.0.0",
     "typescript": "^5.5.4"
   }
 }

@@ -12,7 +12,8 @@ export interface Question {
     ID: number,
     answer:string | null,
     question:string,
-    options: string[]
+    options: string[],
+    studentAnswer: string | null
 }
 
 export interface Questions {

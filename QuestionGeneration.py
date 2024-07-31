@@ -61,11 +61,12 @@ client = OpenAI(
 # )
 
 class Question:
-    def __init__(self, question: str, answer_option: str, wrong_options, ID=None):
+    def __init__(self, question: str, answer_option: str, wrong_options, ID=None, student_answer=None):
         self.question = question
         self.answer_option = answer_option
         self.wrong_options = wrong_options
         self.ID = ID
+        self.student_answer = student_answer
 
     def __repr__(self):
         return f"Question(question={self.question}, answer_option={self.answer_option}, wrong_options={self.wrong_options})"
@@ -93,7 +94,8 @@ class Question:
             "ID": self.ID,
             "question": self.question,
             "options": options,
-            "answer": self.answer_option
+            "answer": self.answer_option,
+            "studentAnswer": self.student_answer
         }
 
 
@@ -117,6 +119,11 @@ class Question_Bank:
 
 def from_dict(data):
     questions = [Question(q['question'], q['answerOption'], q['wrongOptions']) for q in data['questions']]
+    return Question_Bank(questions)
+
+
+def from_dict_with_id(data):
+    questions = [Question(q['question'], q['answerOption'], q['wrongOptions'], q['id']) for q in data['questions']]
     return Question_Bank(questions)
 
 

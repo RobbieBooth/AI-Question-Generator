@@ -2,8 +2,6 @@ import os
 import random
 import site
 
-from sqlalchemy.orm import aliased
-
 vendor_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "vendor")
 site.addsitedir(vendor_path)
 
@@ -16,13 +14,14 @@ from urllib.parse import quote_plus, urlencode
 
 from authlib.integrations.flask_client import OAuth
 from dotenv import find_dotenv, load_dotenv
-from flask import Flask, redirect, render_template, session, url_for, jsonify, request
+from flask import Flask, redirect, render_template, session, url_for, jsonify, request, abort
 from flask_sqlalchemy import SQLAlchemy
 
 from sqlalchemy.sql import func
 from sqlalchemy import text, PrimaryKeyConstraint, ForeignKeyConstraint
 
 from flask_cors import CORS
+import QuestionGeneration
 
 ENV_FILE = find_dotenv()
 if ENV_FILE:
@@ -37,6 +36,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = \
     "mysql+pymysql://" + env.get("DATABASE_USERNAME") + ":" + env.get("DATABASE_PASSWORD") + "@" + env.get(
         "DATABASE_HOST") + ":" + env.get("DATABASE_PORT") + "/" + env.get("DATABASE_NAME")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# increase max payload size
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB
 
 # Allow all origins
 CORS(app)
@@ -66,6 +67,7 @@ class StudentTaskAttempt(db.Model):
     Timestamp = db.Column(db.DateTime(timezone=True),
                           server_default=func.now())
 
+    attempted = db.Column(db.Boolean, nullable=False, default=False)
     # Columns that will form the composite foreign key
     codeRunnerQuestionID = db.Column(db.Integer, nullable=False)
     studentUsername = db.Column(db.String(30), nullable=False)
@@ -119,9 +121,9 @@ class QuestionOption(db.Model):
     option = db.relationship(OptionTable, backref=db.backref("question_option", cascade="all, delete-orphan"))
 
 
-with app.app_context():
-    db.drop_all()
-    db.create_all()
+# with app.app_context():
+#     db.drop_all()
+#     db.create_all()
 
 oauth = OAuth(app)
 
@@ -259,6 +261,64 @@ def get_code_from_previous_submission(student_username, code_runner_previous_que
         return None
 
 
+def get_questions_from_database(attempt_id) -> QuestionGeneration.Question_Bank:
+    sqlQuery = """
+    SELECT 
+    q.ID AS question_id,
+    q.Question as question,
+    q.this_doesnt_seem_right as this_doesnt_seem_right,
+    GROUP_CONCAT(o.optionText ORDER BY o.id ASC SEPARATOR '<MY_SEPARATOR>') AS options,
+    ao.optionText AS answer_text,
+    CASE
+        WHEN sao.optionText IS NULL AND q.this_doesnt_seem_right = 1 THEN :defaultNotRightValue
+        ELSE sao.optionText
+    END AS student_answer
+FROM 
+    question q
+JOIN 
+    questionOption qo
+ON 
+    q.id = qo.question_id
+JOIN 
+    optionTable o
+ON 
+    qo.option_id = o.id
+LEFT JOIN 
+    optionTable ao
+ON 
+    q.answer = ao.id  -- Join to get the answer text
+LEFT JOIN 
+    optionTable sao
+ON 
+    q.StudentAnswer = sao.id  -- Join to get the student answer text
+WHERE 
+    q.attemptID = :attemptID 
+GROUP BY 
+    q.id, q.Question;
+    """
+
+    result = db.session.execute(text(sqlQuery),
+                                {'attemptID': attempt_id, 'defaultNotRightValue': "This question doesn't seem right?"})
+    if not result:
+        return QuestionGeneration.Question_Bank([])
+
+    questions = []
+    for row in result:
+        question_id = row[0]
+        question_text = row[1]
+        this_doesnt_seem_right = row[2]
+        options_list: list[str] = row[3].split('<MY_SEPARATOR>')
+        answer = row[4]
+        student_answer = row[5]
+        options_list.remove(answer)
+
+        question = QuestionGeneration.Question(question=question_text, answer_option=answer, wrong_options=options_list,
+                                               ID=question_id, student_answer=student_answer)
+        questions.append(question)
+
+    return QuestionGeneration.Question_Bank(questions)
+
+
 @app.route('/generate_questions', methods=['POST'])
 def generate_questions_route():
     code_snippet = request.form.get('code_snippet')
@@ -269,12 +329,30 @@ def generate_questions_route():
 
     code_runner_previous_question_id = request.form.get('crui_previous_question_id')
 
-    if code_snippet is None:
+    # Query to find the ID
+    result = db.session.query(StudentTaskAttempt.ID, StudentTaskAttempt.attempted).filter(
+        StudentTaskAttempt.codeRunnerQuestionID == code_runner_question_id,
+        StudentTaskAttempt.studentUsername == student_username
+    ).first()
+
+    # If questions have already been generated get them
+    if result:
+        attempt_id = result[0]
+        attempted = result[1]
+        student_questions = get_questions_from_database(attempt_id).to_student_dict()
+        return jsonify(questions=student_questions, attempt_id=attempt_id, answered=attempted)
+
+    if code_snippet is None or code_snippet == "":
         code_snippet = get_code_from_previous_submission(student_username, code_runner_previous_question_id)
 
-    student_attempt = save_student_attempt(student_username, code_runner_question_id, code_snippet)
+    #Code is still null so must not have been completed yet
+    if code_snippet is None or code_snippet == "":
+        response = jsonify({"description": "NO CODE FOUND"})
+        response.status_code = 404
+        return response
 
-    #TODO if student username and questionid exist in generated then ignore and return results
+    student_attempt = save_student_attempt(student_username, code_runner_question_id, code_snippet)
+    attempt_id = student_attempt.ID
 
     questions = generate_ai_questions(code_snippet)
     for question in questions.questions:
@@ -282,7 +360,7 @@ def generate_questions_route():
                                     question.wrong_options)
         question.update_ID(new_question.ID)
     student_questions = questions.to_student_dict()
-    return jsonify(questions=student_questions, attempt_id=student_attempt.ID)
+    return jsonify(questions=student_questions, attempt_id=attempt_id, answered=False)
 
 
 @app.route("/")
@@ -322,7 +400,7 @@ def saveanswers(id):
                            {'question_id': answer['question']['ID'], 'answerText': answer['studentAnswer']})
 
     query_questions_correct = """
-    UPDATE `student_task_attempt` SET questionsCorrect = (SELECT COUNT(*) as correct FROM `question` WHERE StudentAnswer = Answer AND attemptID = :attempt_id) WHERE ID = :attempt_id; 
+    UPDATE `student_task_attempt` SET questionsCorrect = (SELECT COUNT(*) as correct FROM `question` WHERE StudentAnswer = Answer AND attemptID = :attempt_id), attempted = TRUE WHERE ID = :attempt_id; 
     """
     db.session.execute(text(query_questions_correct), {'attempt_id': id});
     # Commit the transaction
@@ -353,11 +431,24 @@ def insert_or_update_code(code_runner_question_id, code_runner_student_id, stude
 
 @app.route('/savecode', methods=['POST'])
 def saveCode():
-    code_snippet = request.form.get('code_snippet')
-    code_runner_question_id = request.form.get('crui_question_id')
-    code_runner_student_id = request.form.get('crui_student_myplace_id')
-    student_username = request.form.get('crui_username')
-    student_email = request.form.get('crui_student_email')
+    # if not request.is_json:
+    #     return {'status': 'failure'}
+
+    # Parse the JSON data
+    data = request.get_json()
+
+    # code_snippet = request.form.get('code_snippet')
+    # code_runner_question_id = request.form.get('crui_question_id')
+    # code_runner_student_id = request.form.get('crui_student_myplace_id')
+    # student_username = request.form.get('crui_username')
+    # student_email = request.form.get('crui_student_email')
+
+    # Extract data from JSON
+    student_username = data.get('crui_username')
+    student_email = data.get('crui_student_email')
+    code_runner_student_id = data.get('crui_student_myplace_id')
+    code_runner_question_id = data.get('crui_question_id')
+    code_snippet = data.get('code_snippet')
 
     insert_or_update_code(code_runner_question_id, code_runner_student_id, student_username, code_snippet,
                           student_email)

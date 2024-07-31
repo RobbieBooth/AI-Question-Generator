@@ -18,18 +18,18 @@ const url = '/generate_questions';
 let currentAttemptID:number | null = null;
 
 $(document).ready(function() {
-    let question:Question = {ID: 130, answer: "26 times.", options: ["27 times.",
-    "25 times.",
-    "26 times.",
-    "Zero times.",
-    "This question doesn't seem right?"], question: "How many times will the loop execute?"}
-    let studentAnswer:StudentAnswer = {question: question, studentAnswer: "26 times."};
-    // generate_answer(studentAnswer, 1);
-    // $('#crui_generate_button').prop("disabled", true);
-    //             $('#crui_generated_question_holder').removeClass("visually-hidden");
             $('#crui_check_answers').on("click", function () {
                 evaluate_answers();
             });
+//             $('#questions').on("change", "input[type='radio']", function() {
+//     // Extract question ID and option index from the radio button's ID
+//     const [questionID, optionIndex] = $(this).attr('id').match(/crui_Q(\d+)_Option(\d+)/).slice(1, 3);
+//     const option = $(this).next('label').text();
+//     const questionNumber = /* logic to determine questionNumber from questionID */;
+//
+//     // Call runFunction with the selected option, question number, and question ID
+//     runFunction(option, questionNumber, questionID);
+// });
             $('#crui_generated_question_holder').removeClass("visually-hidden");
             $('#code-form').submit(function(event) {
                 event.preventDefault();
@@ -55,10 +55,21 @@ $(document).ready(function() {
                         // console.log();
                         const parsedObject = response.questions as Question[];
                         currentAttemptID = response.attempt_id;
+                        const answered:boolean = response.answered ?? false;
+                        $('#crui_answered').val(answered.toString());
+                        $('#crui_attemptID').val(response.attempt_id);
+                        if(answered){
+                            const studentAnswers:StudentAnswer[] = parsedObject.map(function (question){
+                                return {"studentAnswer": question.studentAnswer, "question": question}
+                            });
+                            studentAnswers.forEach((question, index)=>generate_answer(question, index+1));
+                        }else{
+                            parsedObject.forEach((question, index)=>generate_question(question, index+1));
+                        }
                         //save questions
                         sessionStorage.setItem("crui_questions", JSON.stringify(parsedObject));
                         sessionStorage.setItem("crui_answers", JSON.stringify([]));
-                        parsedObject.forEach((question, index)=>generate_question(question, index+1));
+
                     },
                     error: function (jqXHR, textStatus, errorThrown) {
                         $('#questions').empty();
@@ -78,9 +89,11 @@ $(document).ready(function() {
             });
         });
 
-function generate_answer(studentAnswer: StudentAnswer, questionNumber){
+export function generate_answer(studentAnswer: StudentAnswer, questionNumber:number){
     const isCorrect = studentAnswer.studentAnswer != null ? studentAnswer.studentAnswer === studentAnswer.question.answer : false;
-    $(`#crui_Q${questionNumber}_answer`).val(studentAnswer.question.answer)
+    $(`#crui_Q${questionNumber}_answer`).val(studentAnswer.question.answer ?? "");
+    $(`#crui_Q${questionNumber}_student_answer`).val(studentAnswer.studentAnswer ?? "");
+    $(`#crui_Q${questionNumber}_id`).val(studentAnswer.question.ID ?? "")
     $('#questions').append(`<div class="m-3">
         <div class="card ${(isCorrect ? "border-success" : "border-danger")}">
           <div class="card-body">
@@ -99,8 +112,9 @@ function generate_answer(studentAnswer: StudentAnswer, questionNumber){
       </div>`);
 }
 
-function generate_question(question:Question, questionNumber:number){
-    $(`#crui_Q${questionNumber}_answer`).val(question.answer)
+export function generate_question(question:Question, questionNumber:number){
+    $(`#crui_Q${questionNumber}_answer`).val(question.answer ?? "");
+    $(`#crui_Q${questionNumber}_id`).val(question.ID);
     $('#questions').append(`<div class="m-3">
         <div class="card">
           <div class="card-body">
@@ -111,9 +125,14 @@ function generate_question(question:Question, questionNumber:number){
           </div>
         </div>
       </div>`);
+    //Have to add later as they have to be created
+    //For radio buttons on form
+    question.options.forEach(function(option, index){
+        $(`#crui_Q${question.ID}_Option${index}`).on("change", function (){runFunction(option, questionNumber, question.ID)});
+    })
 }
 
-function runFunction(studentAnswerValue:string, questionNumber, questionID:number) {
+function runFunction(studentAnswerValue:string, questionNumber:number, questionID:number) {
     // Construct the ID using the question number
     const selector = `#crui_Q${questionNumber}_student_answer`;
 
@@ -127,17 +146,19 @@ function runFunction(studentAnswerValue:string, questionNumber, questionID:numbe
     }
 
     //update session storage of answer
-    saveAnswer(studentAnswerValue, questionID);
+    // saveAnswer(studentAnswerValue, questionID);
 }
 
 
 //TODO may be errors due to replace for backticks and double quotes etc
-function generate_options(options: string[], questionNumber, questionID, disabled=false, selectedOption:null | string = null, correctorwrongSymbol: boolean = false, questionAnswer: string | null = null):string{
+//onchange="runFunction('${option.replace(/'/g, "\\'")}',${questionNumber}, ${questionID})"
+function generate_options(options: string[], questionNumber:number, questionID:number, disabled=false, selectedOption:null | string = null, correctorwrongSymbol: boolean = false, questionAnswer: string | null = null):string{
     return options.map((option, index) => {
         const checked = selectedOption != null ? (selectedOption == option) : false;
+        // $(`#crui_Q${questionID}_Option${index}`).on("onChange", function (){runFunction(option, questionNumber, questionID)});
          return `
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="crui_Q${questionID}" id="crui_Q${questionID}_Option${index}" onchange="runFunction('${option.replace(/'/g, "\\'")}',${questionNumber}, ${questionID})" ${disabled ? "disabled" : ""} ${checked ? "checked" : ""}>
+                    <input class="form-check-input" type="radio" name="crui_Q${questionID}" id="crui_Q${questionID}_Option${index}" ${disabled ? "disabled" : ""} ${checked ? "checked" : ""}>
                     <label class="form-check-label" for="crui_Q${questionID}_Option${index}">
                         ${option}
                     </label>
@@ -164,7 +185,7 @@ function saveAnswer(studentAnswer:string, questionID:number): void {
     const answers: StudentAnswer[] = JSON.parse(sessionStorage.getItem('crui_answers') || '[]');
     const stupidArray: any = answers;
     // Check if the answer already exists
-    let existingAnswerIndex = stupidArray.findIndex(answer => answer.question.ID === questionID)
+    let existingAnswerIndex = stupidArray.findIndex((answer:StudentAnswer) => answer.question.ID === questionID)
 
     if (existingAnswerIndex !== -1) {
         // Update existing answer
@@ -172,7 +193,7 @@ function saveAnswer(studentAnswer:string, questionID:number): void {
     } else {
         // Add new answer
         const questions = JSON.parse(sessionStorage.getItem('crui_questions') || '[]');
-        const questionIndex = questions.findIndex(question => question.ID === questionID);
+        const questionIndex = questions.findIndex((question:Question) => question.ID === questionID);
 
          if(questionIndex !== -1){
              const studentAnswerObject:StudentAnswer = {question: questions[questionIndex], studentAnswer: studentAnswer};
@@ -207,7 +228,10 @@ function evaluate_answers() {
     $('#questions').empty();
     answers.forEach((studentAnswer, index)=>generate_answer(studentAnswer, index+1));
     console.log(JSON.stringify(answers));
-    saveStudentAnswersToDB(answers, currentAttemptID);
+    if(currentAttemptID != null){
+            saveStudentAnswersToDB(answers, currentAttemptID);
+    }
+
 }
 
 async function saveStudentAnswersToDB(data:StudentAnswer[], attemptID:number) {
