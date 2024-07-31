@@ -41,6 +41,7 @@ $(document).ready(function() {
                     crui_student_email: $('#crui_student_email').text(),
                     crui_student_myplace_id: $('#crui_student_myplace_id').text(),
                     crui_question_id: $('#crui_question_id').text(),
+                    crui_previous_question_id: $('#crui_previous_question_id').text(),
                     code_snippet: $('#codeTextArea').val()
                 };
                 $.ajax({

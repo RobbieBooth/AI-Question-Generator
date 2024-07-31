@@ -20,7 +20,7 @@ from flask import Flask, redirect, render_template, session, url_for, jsonify, r
 from flask_sqlalchemy import SQLAlchemy
 
 from sqlalchemy.sql import func
-from sqlalchemy import text
+from sqlalchemy import text, PrimaryKeyConstraint, ForeignKeyConstraint
 
 from flask_cors import CORS
 
@@ -44,14 +44,39 @@ CORS(app)
 db = SQLAlchemy(app)
 
 
+# Assuming only one student code would be stored per student per question
+class StudentSubmittedCode(db.Model):
+    __tablename__ = 'student_submitted_code'
+    codeSubmitted = db.Column(db.Text, nullable=False)
+    codeRunnerQuestionID = db.Column(db.Integer, nullable=False)
+    codeRunnerStudentID = db.Column(db.Integer, nullable=False)
+    studentUsername = db.Column(db.String(30), nullable=False)
+    studentEmail = db.Column(db.String(255), nullable=True)
+
+    __table_args__ = (
+        PrimaryKeyConstraint('codeRunnerQuestionID', 'studentUsername'),
+    )
+
+
 class StudentTaskAttempt(db.Model):
     __tablename__ = 'student_task_attempt'
     ID = db.Column(db.Integer, primary_key=True)
     questionsCorrect = db.Column(db.Integer, nullable=True)
-    CodeSubmitted = db.Column(db.Text, nullable=False)
+    CodeUsedToGenerate = db.Column(db.Text, nullable=False)
     Timestamp = db.Column(db.DateTime(timezone=True),
                           server_default=func.now())
-    studentID = db.Column(db.String(255), nullable=True)
+
+    # Columns that will form the composite foreign key
+    codeRunnerQuestionID = db.Column(db.Integer, nullable=False)
+    studentUsername = db.Column(db.String(30), nullable=False)
+
+    # # Defining the composite foreign key constraint
+    # __table_args__ = (
+    #     ForeignKeyConstraint(
+    #         ['codeRunnerQuestionID', 'studentUsername'],
+    #         ['student_submitted_code.codeRunnerQuestionID', 'student_submitted_code.studentUsername']
+    #     ),
+    # )
 
     def __repr__(self):
         return f'<Student {self.firstname}>'
@@ -177,17 +202,12 @@ def get_ID(session):
     return userinfo["sub"]
 
 
-def save_student_attempt(studentID, code):
-    student_attempt = StudentTaskAttempt(studentID=studentID, CodeSubmitted=code)
+def save_student_attempt(studentID, codeRunnerQuesionID, code):
+    student_attempt = StudentTaskAttempt(studentUsername=studentID, codeRunnerQuestionID=codeRunnerQuesionID,
+                                         CodeUsedToGenerate=code)
     db.session.add(student_attempt)
     db.session.commit()
     return student_attempt
-    # otherOptions = []
-    # otherOptions.append("1")
-    # otherOptions.append("2")
-    # otherOptions.append("3")
-    # otherOptions.append("4")
-    # add_question(student_attempt.ID, "hello", "yes, hello", otherOptions)
 
 
 def add_question(attemptID, question, answer: str, wrong_options: list[str]):
@@ -203,11 +223,6 @@ def add_question(attemptID, question, answer: str, wrong_options: list[str]):
         options.append(new_option)
 
     db.session.commit()
-    # data = request.json
-    # attemptID = data.get('attemptID')
-    # question_text = data.get('Question')
-    # student_answer_id = data.get('StudentAnswer')
-    # answer_id = data.get('Answer')
 
     # Validate and create the question
     new_question = Question(
@@ -227,11 +242,40 @@ def add_question(attemptID, question, answer: str, wrong_options: list[str]):
     return new_question
 
 
+def get_code_from_previous_submission(student_username, code_runner_previous_question_id) -> str | None:
+    '''
+    Searches the database for the code that was last submitted for the student_username and code_runner_previous_question_id
+    :param student_username: string representing the student unique username e.g: xcc21164
+    :param code_runner_previous_question_id: the code runner question id for the previous question which submitted the code
+    :return: a string representing the code that was submitted or none if the row was not found in database
+    '''
+    result = StudentSubmittedCode.query.filter_by(
+        studentUsername=student_username,
+        codeRunnerQuestionID=code_runner_previous_question_id
+    ).first()
+    if result:
+        return result.codeSubmitted
+    else:
+        return None
+
+
 @app.route('/generate_questions', methods=['POST'])
 def generate_questions_route():
     code_snippet = request.form.get('code_snippet')
-    student_attempt = save_student_attempt(request.form.get('crui_username'), code_snippet)
-    # questions = generate_questions(code_snippet)
+    code_runner_question_id = request.form.get('crui_question_id')
+    code_runner_student_id = request.form.get('crui_student_myplace_id')
+    student_username = request.form.get('crui_username')
+    student_email = request.form.get('crui_student_email')
+
+    code_runner_previous_question_id = request.form.get('crui_previous_question_id')
+
+    if code_snippet is None:
+        code_snippet = get_code_from_previous_submission(student_username, code_runner_previous_question_id)
+
+    student_attempt = save_student_attempt(student_username, code_runner_question_id, code_snippet)
+
+    #TODO if student username and questionid exist in generated then ignore and return results
+
     questions = generate_ai_questions(code_snippet)
     for question in questions.questions:
         new_question = add_question(student_attempt.ID, question.question, question.answer_option,
@@ -239,69 +283,6 @@ def generate_questions_route():
         question.update_ID(new_question.ID)
     student_questions = questions.to_student_dict()
     return jsonify(questions=student_questions, attempt_id=student_attempt.ID)
-
-
-def generate_questions(code_snippet):
-    # Placeholder for question generation logic
-    questions = '''[
-    {
-    "ID": 1,
-    "question": "Which of the following is a programming language?",
-    "answer": "Python",
-    "options": [
-        { "questionID": 1, "ID": 1, "option": "Python" },
-        { "questionID": 1, "ID": 2, "option": "HTML" },
-        { "questionID": 1, "ID": 3, "option": "CSS" },
-        { "questionID": 1, "ID": 4, "option": "SQL" }
-    ]
-},
-    {
-    "ID": 2,
-    "question": "Which company developed the Java programming language?",
-    "answer": "Sun Microsystems",
-    "options": [
-        { "questionID": 2, "ID": 1, "option": "Sun Microsystems" },
-        { "questionID": 2, "ID": 2, "option": "Microsoft" },
-        { "questionID": 2, "ID": 3, "option": "IBM" },
-        { "questionID": 2, "ID": 4, "option": "Oracle" }
-    ]
-},
-    {
-    "ID": 3,
-    "question": "What does 'HTML' stand for?",
-    "answer": "HyperText Markup Language",
-    "options": [
-        { "questionID": 3, "ID": 1, "option": "HyperText Markup Language" },
-        { "questionID": 3, "ID": 2, "option": "HighText Machine Language" },
-        { "questionID": 3, "ID": 3, "option": "HyperText Media Language" },
-        { "questionID": 3, "ID": 4, "option": "Hyperlink and Text Markup Language" }
-    ]
-},
-    {
-    "ID": 4,
-    "question": "What does CSS stand for?",
-    "answer": "Cascading Style Sheets",
-    "options": [
-        { "questionID": 4, "ID": 1, "option": "Cascading Style Sheets" },
-        { "questionID": 4, "ID": 2, "option": "Computer Style Sheets" },
-        { "questionID": 4, "ID": 3, "option": "Creative Style Sheets" },
-        { "questionID": 4, "ID": 4, "option": "Cascading Script Sheets" }
-    ]
-},
-    {
-    "ID": 5,
-    "question": "Which data structure uses LIFO (Last In, First Out) order?",
-    "answer": "Stack",
-    "options": [
-        { "questionID": 5, "ID": 1, "option": "Stack" },
-        { "questionID": 5, "ID": 2, "option": "Queue" },
-        { "questionID": 5, "ID": 3, "option": "Array" },
-        { "questionID": 5, "ID": 4, "option": "Linked List" }
-    ]
-}
-]
-'''
-    return questions
 
 
 @app.route("/")
@@ -335,8 +316,8 @@ def saveanswers(id):
 
     # Execute the raw SQL query
     for answer in studentAnswers:
-        if(answer['studentAnswer'] == "This question doesn't seem right?"):
-            db.session.execute(text(query_for_not_right),{'question_id': answer['question']['ID']})
+        if (answer['studentAnswer'] == "This question doesn't seem right?"):
+            db.session.execute(text(query_for_not_right), {'question_id': answer['question']['ID']})
         db.session.execute(text(query),
                            {'question_id': answer['question']['ID'], 'answerText': answer['studentAnswer']})
 
@@ -349,5 +330,35 @@ def saveanswers(id):
 
     return {'status': 'success'}
 
-# if __name__ == "__main__":
-#     app.run(host="0.0.0.0", port=env.get("PORT", 3000))
+
+def insert_or_update_code(code_runner_question_id, code_runner_student_id, student_username, code_submitted,
+                          student_email=None):
+    query = text("""
+        INSERT INTO student_submitted_code (codeRunnerQuestionID, codeRunnerStudentID, studentUsername, codeSubmitted, studentEmail)
+        VALUES (:code_runner_question_id, :code_runner_student_id, :student_username, :code_submitted, :student_email)
+        ON DUPLICATE KEY UPDATE
+            codeSubmitted = VALUES(codeSubmitted),
+            studentEmail = VALUES(studentEmail)
+    """)
+
+    db.session.execute(query, {
+        'code_runner_question_id': code_runner_question_id,
+        'code_runner_student_id': code_runner_student_id,
+        'student_username': student_username,
+        'code_submitted': code_submitted,
+        'student_email': student_email
+    })
+    db.session.commit()
+
+
+@app.route('/savecode', methods=['POST'])
+def saveCode():
+    code_snippet = request.form.get('code_snippet')
+    code_runner_question_id = request.form.get('crui_question_id')
+    code_runner_student_id = request.form.get('crui_student_myplace_id')
+    student_username = request.form.get('crui_username')
+    student_email = request.form.get('crui_student_email')
+
+    insert_or_update_code(code_runner_question_id, code_runner_student_id, student_username, code_snippet,
+                          student_email)
+    return {'status': 'success'}
