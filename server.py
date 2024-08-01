@@ -44,6 +44,21 @@ CORS(app)
 
 db = SQLAlchemy(app)
 
+default_question_count = 8
+default_context = None
+default_question_topics = """
+    Some type of potential questions topics could be:
+    -Parameter Names
+    -Variable Names
+    -Loop End
+    -Variable Declaration
+    -Variable role – i.e: Which of the following best describes the role of variable <Variable>
+    -Line Purpose
+    -Loop Count
+    -Variable Trace"""
+default_code_template = None
+default_code_language = "Java"
+
 
 # Assuming only one student code would be stored per student per question
 class StudentSubmittedCode(db.Model):
@@ -321,13 +336,32 @@ GROUP BY
 
 @app.route('/generate_questions', methods=['POST'])
 def generate_questions_route():
-    code_snippet = request.form.get('code_snippet')
+    code_snippet: str | None = request.form.get('code_snippet')
     code_runner_question_id = request.form.get('crui_question_id')
     code_runner_student_id = request.form.get('crui_student_myplace_id')
     student_username = request.form.get('crui_username')
     student_email = request.form.get('crui_student_email')
-
     code_runner_previous_question_id = request.form.get('crui_previous_question_id')
+
+    try:
+        question_count = int(request.form.get('question_count', default_question_count))
+    except ValueError:
+        question_count = default_question_count
+
+    code_context = request.form.get('code_context', default_context)
+    code_template = request.form.get('code_template', default_code_template)
+
+    # Custom question topics or default ones
+    question_topics = request.form.get('question_topics')
+    if is_empty(question_topics):
+        question_topics = default_question_topics
+    else:
+        question_topics = "The Questions should be on these topics: {0}".format(question_topics)
+
+    code_language = request.form.get('code_language')
+    if is_empty(code_language):
+        code_language = default_code_language
+
 
     # Query to find the ID
     result = db.session.query(StudentTaskAttempt.ID, StudentTaskAttempt.attempted).filter(
@@ -336,17 +370,17 @@ def generate_questions_route():
     ).first()
 
     # If questions have already been generated get them
-    if result:
+    if result is not None:
         attempt_id = result[0]
         attempted = result[1]
         student_questions = get_questions_from_database(attempt_id).to_student_dict()
         return jsonify(questions=student_questions, attempt_id=attempt_id, answered=attempted)
 
-    if code_snippet is None or code_snippet == "":
+    if code_snippet is None or len(code_snippet) == 0:
         code_snippet = get_code_from_previous_submission(student_username, code_runner_previous_question_id)
 
-    #Code is still null so must not have been completed yet
-    if code_snippet is None or code_snippet == "":
+    # Code is still null so must not have been completed yet
+    if code_snippet is None or len(code_snippet) == 0:
         response = jsonify({"description": "NO CODE FOUND"})
         response.status_code = 404
         return response
@@ -354,13 +388,31 @@ def generate_questions_route():
     student_attempt = save_student_attempt(student_username, code_runner_question_id, code_snippet)
     attempt_id = student_attempt.ID
 
-    questions = generate_ai_questions(code_snippet)
+    data = {
+        "question_count": question_count,
+        "code_context": code_context,
+        "question_topics": question_topics,
+        "code_template": code_template,
+        "code_langauge": code_language,
+        "student_code": code_snippet
+    }
+    # print(json.dumps(data, indent=2))
+    questions = generate_ai_questions(data)
     for question in questions.questions:
         new_question = add_question(student_attempt.ID, question.question, question.answer_option,
                                     question.wrong_options)
         question.update_ID(new_question.ID)
     student_questions = questions.to_student_dict()
     return jsonify(questions=student_questions, attempt_id=attempt_id, answered=False)
+
+
+def is_empty(value: str | None) -> bool:
+    '''
+    checks if the value is None or empty
+    :param value: value to check
+    :return: boolean of true if empty
+    '''
+    return value is None or len(value.strip()) == 0
 
 
 @app.route("/")
