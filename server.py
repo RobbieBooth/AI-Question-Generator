@@ -60,17 +60,30 @@ default_code_template = None
 default_code_language = "Java"
 
 
+class CodeQuestion(db.Model):
+    '''
+    The question that the AI should generate questions based on
+    '''
+    __tablename__ = 'code_question'
+    id = db.Column(db.Integer, primary_key=True)
+    template = db.Column(db.Text, nullable=False)
+    language = db.Column(db.String(50), nullable=False)
+
 # Assuming only one student code would be stored per student per question
 class StudentSubmittedCode(db.Model):
     __tablename__ = 'student_submitted_code'
     codeSubmitted = db.Column(db.Text, nullable=False)
-    codeRunnerQuestionID = db.Column(db.Integer, nullable=False)
+    # linkedCodeQuestionID = db.Column(db.Integer, nullable=False)
     codeRunnerStudentID = db.Column(db.Integer, nullable=False)
     studentUsername = db.Column(db.String(30), nullable=False)
     studentEmail = db.Column(db.String(255), nullable=True)
+    linkedCodeQuestionID = db.Column(db.Integer, db.ForeignKey('code_question.id'), nullable=False)
+
+    # Define relationships
+    code_question_id = db.relationship('CodeQuestion', foreign_keys=[linkedCodeQuestionID])
 
     __table_args__ = (
-        PrimaryKeyConstraint('codeRunnerQuestionID', 'studentUsername'),
+        PrimaryKeyConstraint('linkedCodeQuestionID', 'studentUsername'),
     )
 
 
@@ -268,7 +281,7 @@ def get_code_from_previous_submission(student_username, code_runner_previous_que
     '''
     result = StudentSubmittedCode.query.filter_by(
         studentUsername=student_username,
-        codeRunnerQuestionID=code_runner_previous_question_id
+        linkedCodeQuestionID=code_runner_previous_question_id
     ).first()
     if result:
         return result.codeSubmitted
@@ -362,6 +375,11 @@ def generate_questions_route():
     if is_empty(code_language):
         code_language = default_code_language
 
+    #If question template exists override one given same for langauage
+    existing_code_question: CodeQuestion | None = CodeQuestion.query.get(code_runner_previous_question_id)
+    if existing_code_question is not None:
+        code_template = existing_code_question.template
+        code_language = existing_code_question.language
 
     # Query to find the ID
     result = db.session.query(StudentTaskAttempt.ID, StudentTaskAttempt.attempted).filter(
@@ -464,7 +482,7 @@ def saveanswers(id):
 def insert_or_update_code(code_runner_question_id, code_runner_student_id, student_username, code_submitted,
                           student_email=None):
     query = text("""
-        INSERT INTO student_submitted_code (codeRunnerQuestionID, codeRunnerStudentID, studentUsername, codeSubmitted, studentEmail)
+        INSERT INTO student_submitted_code (linkedCodeQuestionID, codeRunnerStudentID, studentUsername, codeSubmitted, studentEmail)
         VALUES (:code_runner_question_id, :code_runner_student_id, :student_username, :code_submitted, :student_email)
         ON DUPLICATE KEY UPDATE
             codeSubmitted = VALUES(codeSubmitted),
