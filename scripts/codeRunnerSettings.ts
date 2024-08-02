@@ -16,6 +16,7 @@ $(document).ready(function() {
                     question_topics: $('#crui_question_topics').text(),
                     code_context: $('#crui_code_context').text(),
                     question_count: $('#crui_question_count').text(),
+                    generation_mode: $('#crui_generation_mode').text(),
                 };
                 $.ajax({
                     type: 'POST',

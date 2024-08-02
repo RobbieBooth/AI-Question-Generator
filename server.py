@@ -58,6 +58,7 @@ default_question_topics = """
     -Variable Trace"""
 default_code_template = None
 default_code_language = "Java"
+default_generation_mode = False
 
 
 class CodeQuestion(db.Model):
@@ -356,6 +357,9 @@ def generate_questions_route():
     student_email = request.form.get('crui_student_email')
     code_runner_previous_question_id = request.form.get('crui_previous_question_id')
 
+    # does not get previous questions from database if true - just generates more
+    generation_mode: bool = request.form.get('generation_mode', default_generation_mode)
+
     try:
         question_count = int(request.form.get('question_count', default_question_count))
     except ValueError:
@@ -381,18 +385,19 @@ def generate_questions_route():
         code_template = existing_code_question.template
         code_language = existing_code_question.language
 
-    # Query to find the ID
-    result = db.session.query(StudentTaskAttempt.ID, StudentTaskAttempt.attempted).filter(
-        StudentTaskAttempt.codeRunnerQuestionID == code_runner_question_id,
-        StudentTaskAttempt.studentUsername == student_username
-    ).first()
+    if not generation_mode:
+        # Query to find the ID
+        result = db.session.query(StudentTaskAttempt.ID, StudentTaskAttempt.attempted).filter(
+            StudentTaskAttempt.codeRunnerQuestionID == code_runner_question_id,
+            StudentTaskAttempt.studentUsername == student_username
+        ).first()
 
-    # If questions have already been generated get them
-    if result is not None:
-        attempt_id = result[0]
-        attempted = result[1]
-        student_questions = get_questions_from_database(attempt_id).to_student_dict()
-        return jsonify(questions=student_questions, attempt_id=attempt_id, answered=attempted)
+        # If questions have already been generated get them
+        if result is not None:
+            attempt_id = result[0]
+            attempted = result[1]
+            student_questions = get_questions_from_database(attempt_id).to_student_dict()
+            return jsonify(questions=student_questions, attempt_id=attempt_id, answered=attempted)
 
     if code_snippet is None or len(code_snippet) == 0:
         code_snippet = get_code_from_previous_submission(student_username, code_runner_previous_question_id)
