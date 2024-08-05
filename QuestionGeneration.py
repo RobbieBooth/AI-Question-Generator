@@ -205,7 +205,9 @@ sample = '''{
 }'''
 
 
-def generate_ai_questions(java_code: str):
+def generate_ai_questions(user_data):
+    # Convert data to a JSON string
+    user_prompt = json.dumps(user_data, indent=2)
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
         response_format={"type": "json_object"},
@@ -216,18 +218,15 @@ def generate_ai_questions(java_code: str):
              generate thoughtful multiple-choice questions that can help them understand and improve their coding skills. 
              You should try and make good distractor options to really test students understanding.
 
-    You should create 8 questions, the language the user used is Java and they may tell you what methods or parts they want to assess.
+    The student will provide a json with the following:
+    How many questions they want under "question_count",
+    Which topics they want to be assessed on by "question_topics",
+    "code_context" telling you details about their code,
+    You should only assess students on code that has been modified from "code_template",
+    "student_code" is the students code that has been modified,
+    "code_language" is the language that the student has used
+    
     The questions should have 4 options.
-
-    Some type of potential questions topics could be:
-    -Parameter Names
-    -Variable Names
-    -Loop End
-    -Variable Declaration
-    -Variable role – i.e: Which of the following best describes the role of variable <Variable>
-    -Line Purpose
-    -Loop Count
-    -Variable Trace
 
     You should create questions using the topics that you believe are appropriate for the students’ code given.
 
@@ -241,7 +240,7 @@ def generate_ai_questions(java_code: str):
     ...
     ]
     '''},
-            {"role": "user", "content": java_code
+            {"role": "user", "content": user_prompt
              }
         ]
     )

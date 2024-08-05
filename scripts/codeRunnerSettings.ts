@@ -12,7 +12,11 @@ $(document).ready(function() {
                     crui_student_myplace_id: $('#crui_student_myplace_id').text(),
                     crui_question_id: $('#crui_question_id').text(),
                     crui_previous_question_id: $('#crui_previous_question_id').text(),
-                    code_snippet: null
+                    code_snippet: null,
+                    question_topics: $('#crui_question_topics').text(),
+                    code_context: $('#crui_code_context').text(),
+                    question_count: $('#crui_question_count').text(),
+                    generation_mode: $('#crui_generation_mode').text(),
                 };
                 $.ajax({
                     type: 'POST',
