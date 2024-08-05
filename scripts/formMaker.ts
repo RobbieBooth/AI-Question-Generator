@@ -102,7 +102,8 @@ export function generate_answer(studentAnswer: StudentAnswer, questionNumber:num
         ${generate_options(studentAnswer.question.options, questionNumber, studentAnswer.question.ID, true, studentAnswer.studentAnswer, true, studentAnswer.question.answer)}
             </p>
                 <p class="card-text"><small class="text-body-secondary">
-                ${ studentAnswer.studentAnswer != null ? `Your Answer: ${studentAnswer.studentAnswer}` : "You did not answer question!"}
+                ${studentAnswer.studentAnswer == "This question doesn't seem right?" ? `You answered: This question doesn\'t seem right? Speak to a lecturer to have them review it.`:
+                studentAnswer.studentAnswer != null ? `Your Answer: ${studentAnswer.studentAnswer}` : "You did not answer question!"}
                 <br>
                 The Answer: ${studentAnswer.question.answer}
                 </small></p>
