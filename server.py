@@ -388,7 +388,7 @@ def generate_questions_route():
         "code_langauge": code_language,
         "student_code": code_snippet
     }
-    # print(json.dumps(data, indent=2))
+
     questions = generate_ai_questions(data)
     for question in questions.questions:
         new_question = add_question(student_attempt.ID, question.question, question.answer_option,

@@ -1,19 +1,6 @@
 import {Question, StudentAnswer} from "./formTypes";
 import {Option} from "./databaseTypes";
 
-// document.getElementById('#code-form').addEventListener("submit", function(event){
-//   event.preventDefault()
-//     $.ajax({
-//                     type: 'POST',
-//                     url: '/generate_questions',
-//                     data: $(this).serialize(),
-//                     success: function(response) {
-//                         $('#questions').empty();
-//                         response.questions.forEach(generate_question);
-//                     }
-//                 });
-// });
-const baseURL = "http://127.0.0.1:5000";
 const url = '/generate_questions';
 let currentAttemptID:number | null = null;
 
@@ -21,15 +8,7 @@ $(document).ready(function() {
             $('#crui_check_answers').on("click", function () {
                 evaluate_answers();
             });
-//             $('#questions').on("change", "input[type='radio']", function() {
-//     // Extract question ID and option index from the radio button's ID
-//     const [questionID, optionIndex] = $(this).attr('id').match(/crui_Q(\d+)_Option(\d+)/).slice(1, 3);
-//     const option = $(this).next('label').text();
-//     const questionNumber = /* logic to determine questionNumber from questionID */;
-//
-//     // Call runFunction with the selected option, question number, and question ID
-//     runFunction(option, questionNumber, questionID);
-// });
+
             $('#crui_generated_question_holder').removeClass("visually-hidden");
             $('#code-form').submit(function(event) {
                 event.preventDefault();
@@ -146,17 +125,12 @@ function runFunction(studentAnswerValue:string, questionNumber:number, questionI
         console.warn("Element not found with selector:", selector);
     }
 
-    //update session storage of answer
-    // saveAnswer(studentAnswerValue, questionID);
 }
 
 
-//TODO may be errors due to replace for backticks and double quotes etc
-//onchange="runFunction('${option.replace(/'/g, "\\'")}',${questionNumber}, ${questionID})"
 function generate_options(options: string[], questionNumber:number, questionID:number, disabled=false, selectedOption:null | string = null, correctorwrongSymbol: boolean = false, questionAnswer: string | null = null):string{
     return options.map((option, index) => {
         const checked = selectedOption != null ? (selectedOption == option) : false;
-        // $(`#crui_Q${questionID}_Option${index}`).on("onChange", function (){runFunction(option, questionNumber, questionID)});
          return `
                 <div class="form-check">
                     <input class="form-check-input" type="radio" name="crui_Q${questionID}" id="crui_Q${questionID}_Option${index}" ${disabled ? "disabled" : ""} ${checked ? "checked" : ""}>
