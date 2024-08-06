@@ -1,5 +1,4 @@
 import os
-import random
 import site
 
 vendor_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "vendor")
@@ -7,18 +6,15 @@ site.addsitedir(vendor_path)
 
 import json
 
-from functools import wraps
 from QuestionGeneration import generate_ai_questions
 from os import environ as env
-from urllib.parse import quote_plus, urlencode
 
-from authlib.integrations.flask_client import OAuth
 from dotenv import find_dotenv, load_dotenv
-from flask import Flask, redirect, render_template, session, url_for, jsonify, request, abort
+from flask import Flask, render_template, session, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 
 from sqlalchemy.sql import func
-from sqlalchemy import text, PrimaryKeyConstraint, ForeignKeyConstraint
+from sqlalchemy import text, PrimaryKeyConstraint
 
 from flask_cors import CORS
 import QuestionGeneration
@@ -27,11 +23,8 @@ ENV_FILE = find_dotenv()
 if ENV_FILE:
     load_dotenv(ENV_FILE)
 
-# env.get(
-#         "DATABASE_HOST")
 
 app = Flask(__name__)
-app.secret_key = env.get("APP_SECRET_KEY")
 app.config['SQLALCHEMY_DATABASE_URI'] = \
     "mysql+pymysql://" + env.get("DATABASE_USERNAME") + ":" + env.get("DATABASE_PASSWORD") + "@" + env.get(
         "DATABASE_HOST") + ":" + env.get("DATABASE_PORT") + "/" + env.get("DATABASE_NAME")
@@ -159,82 +152,6 @@ class QuestionOption(db.Model):
 # with app.app_context():
 #     db.drop_all()
 #     db.create_all()
-
-oauth = OAuth(app)
-
-oauth.register(
-    "auth0",
-    client_id=env.get("AUTH0_CLIENT_ID"),
-    client_secret=env.get("AUTH0_CLIENT_SECRET"),
-    client_kwargs={
-        "scope": "openid profile email",
-    },
-    server_metadata_url=f'https://{env.get("AUTH0_DOMAIN")}/.well-known/openid-configuration'
-)
-
-
-@app.route("/login")
-def login():
-    return oauth.auth0.authorize_redirect(
-        # redirect_uri=url_for("callback", _external=True)
-        redirect_uri=env.get("AFTER_LOGIN_URL")
-    )
-
-
-@app.route("/callback", methods=["GET", "POST"])
-def callback():
-    token = oauth.auth0.authorize_access_token()
-    session["user"] = token
-    return redirect(env.get("AFTER_CALLBACK_URL"))
-    # return redirect("/")
-
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(
-        "https://" + env.get("AUTH0_DOMAIN")
-        + "/v2/logout?"
-        + urlencode(
-            {
-                "returnTo": env.get("AFTER_LOGOUT_URL"),
-                # "returnTo": url_for("home", _external=True),
-                "client_id": env.get("AUTH0_CLIENT_ID"),
-            },
-            quote_via=quote_plus,
-        )
-    )
-
-
-def requires_auth(f):
-    """Sends user to home page if they are not logged in else they will continue on page they are on"""
-
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if 'user' not in session:
-            return redirect('/')
-        return f(*args, **kwargs)
-
-    return decorated
-
-
-# @app.route('/protected')
-# @requires_auth
-# def protected():
-#     user = session.get('user')
-#     userinfo = user["userinfo"]
-#     return f'Hello, {userinfo["name"]}! Your user ID is {userinfo["sub"]}.'
-
-
-def get_ID(session):
-    """
-    Returns the id of the current user Auth0 logged-in user
-    :param session: Auth0 session object
-    :return:id of the current user Auth0 logged-in user
-    """
-    user = session.get('user')
-    userinfo = user["userinfo"]
-    return userinfo["sub"]
 
 
 def save_student_attempt(studentID, codeRunnerQuestionID, code):
@@ -495,8 +412,6 @@ def home():
     return render_template("home.html", session=session.get('user'), pretty=json.dumps(session.get('user'), indent=4))
 
 
-# Save the students answer to the attempt based on the attemptID
-#
 @app.route('/saveanswers/<int:id>', methods=['POST'])
 def saveanswers(id):
     """
