@@ -5,6 +5,8 @@ from dotenv import find_dotenv, load_dotenv
 from os import environ as env
 import random
 
+from answerEncryption import encrypt_data
+
 ENV_FILE = find_dotenv()
 if ENV_FILE:
     load_dotenv(ENV_FILE)
@@ -13,52 +15,6 @@ client = OpenAI(
     api_key=env.get("OPENAI_API_KEY")
 )
 
-
-# completion = client.chat.completions.create(
-#     model="gpt-4o-mini",
-#     response_format={"type": "json_object"},
-#     messages=[
-#         {"role": "system",
-#          "content": '''You are an educational assistant specializing in computer science. Your task is to analyse students' code for the beginner programmer class and generate thoughtful multiple-choice questions that can help them understand and improve their coding skills. You should try and make good distractor options to really test students understanding.
-#
-# You should create 8 questions, the language the user used is Java and they may tell you what methods or parts they want to assess.
-#
-# Some type of potential questions topics could be:
-# -Parameter Names
-# -Variable Names
-# -Loop End
-# -Variable Declaration
-# -Variable role – i.e: Which of the following best describes the role of variable <Variable>
-# -Line Purpose
-# -Loop Count
-# -Variable Trace
-#
-# You should create questions using the topics that you believe are appropriate for the students’ code given.
-#
-# The questions should be in a json format like:
-# [
-# {
-# 	“question”: string,
-# 	“answerOption”: string,
-# 	“wrongOptions”: string[],
-# },
-# ...
-# ]
-# '''},
-#         {"role": "user", "content":
-#          '''
-#          private BasicAccount findAcc(int n) {
-# 		for (BasicAccount acc : accounts) {
-# 			if (acc.getAccNumber() == n)
-# 				return acc;
-# 		}
-# 		return null;
-# 	}
-#
-#          '''
-#          }
-#     ]
-# )
 
 class Question:
     def __init__(self, question: str, answer_option: str, wrong_options, ID=None, student_answer=None):
@@ -84,7 +40,12 @@ class Question:
     def get_ID(self):
         return self.ID
 
-    def to_student_dict(self):
+    def to_student_dict(self, encrypt_answer: bool = False):
+        """
+        Converts the question to JSON object and randomises the order of the options.
+        :param encrypt_answer: a bool whether to encrypt the answer
+        :return: a JSON object of the question
+        """
         # randomise option order
         options = self.wrong_options
         options.append(self.answer_option)
@@ -94,7 +55,7 @@ class Question:
             "ID": self.ID,
             "question": self.question,
             "options": options,
-            "answer": self.answer_option,
+            "answer": self.answer_option if not encrypt_answer else encrypt_data(self.answer_option),
             "studentAnswer": self.student_answer
         }
 
@@ -111,9 +72,14 @@ class Question_Bank:
             "questions": [question.to_dict() for question in self.questions]
         }
 
-    def to_student_dict(self):
+    def to_student_dict(self, encrypt_answers: bool = False):
+        """
+        Sorts the questions by ID and converts them into JSON data
+        :param encrypt_answers: bool to determine whether to encrypt the answers of the JSON
+        :return: A JSON array containing all the questions
+        """
         self.questions.sort(key=lambda question: question.get_ID())
-        student_questions = [question.to_student_dict() for question in self.questions]
+        student_questions = [question.to_student_dict(encrypt_answers) for question in self.questions]
         return student_questions
 
 
@@ -127,85 +93,20 @@ def from_dict_with_id(data):
     return Question_Bank(questions)
 
 
-sample = '''{
-	"questions": [
-		{
-			"question": "What is the role of the variable 'sum' in the provided code?",
-			"answerOption": "It stores the result of adding 'first' and 'second'.",
-			"wrongOptions": [
-				"It holds the first number to be added.",
-				"It is used to iterate through a loop.",
-				"It keeps track of the number of additions performed."
-			]
-		},
-		{
-			"question": "What will be printed when the provided code is executed?",
-			"answerOption": "10 + 20 = 30",
-			"wrongOptions": [
-				"10 + 20 = 20",
-				"First number: 10, Second number: 20",
-				"The sum is: 30"
-			]
-		},
-		{
-			"question": "In the line 'int sum = first + second;', which operation is being performed?",
-			"answerOption": "Addition of two integers.",
-			"wrongOptions": [
-				"Subtraction of two integers.",
-				"Multiplication of two integers.",
-				"Division of two integers."
-			]
-		},
-		{
-			"question": "What is the purpose of the line 'int second = 20;'?",
-			"answerOption": "To declare and initialize the variable 'second' with the value 20.",
-			"wrongOptions": [
-				"To change the value of 'first' to 20.",
-				"To initialize 'second' with the value of 'first'.",
-				"To declare a loop variable with an initial value of 20."
-			]
-		},
-		{
-			"question": "What does the 'System.out.println' statement do in this code?",
-			"answerOption": "It prints the sum of first and second to the console.",
-			"wrongOptions": [
-				"It adds the two numbers together in the console.",
-				"It declares a new variable in the program.",
-				"It evaluates an expression without displaying any output."
-			]
-		},
-		{
-			"question": "How many variables are declared in this code snippet?",
-			"answerOption": "Three variables.",
-			"wrongOptions": [
-				"Two variables.",
-				"Four variables.",
-				"One variable."
-			]
-		},
-		{
-			"question": "Which of the following is a valid name for a variable in Java?",
-			"answerOption": "totalSum",
-			"wrongOptions": [
-				"2ndNumber",
-				"first-name",
-				"sum total"
-			]
-		},
-		{
-			"question": "What will be the value of 'first' after the execution of the code?",
-			"answerOption": "10",
-			"wrongOptions": [
-				"20",
-				"30",
-				"0"
-			]
-		}
-	]
-}'''
-
-
-def generate_ai_questions(user_data):
+def generate_ai_questions(user_data) -> Question_Bank:
+    """
+    Uses Artificial Intelligence (AI) to generate questions
+    :param user_data: A JSON object containing information that can influence the way questions are generated:
+    {
+        "question_count": int - the number of questions that should be generated,
+        "code_context": str | None - context to the task or student_code,
+        "question_topics": Comma seperated str | None - the topics for the AI to generate questions on,
+        "code_template": str | None - the initial code that the student was provided,
+        "code_langauge": str - the programming langauge that has been used,
+        "student_code": str - the student's final code.
+    }
+    :return: A bank of the questions that were generated by the AI
+    """
     # Convert data to a JSON string
     user_prompt = json.dumps(user_data, indent=2)
     completion = client.chat.completions.create(
@@ -213,10 +114,10 @@ def generate_ai_questions(user_data):
         response_format={"type": "json_object"},
         messages=[
             {"role": "system",
-             "content": '''
-             You are an educational assistant specializing in computer science. Your task is to analyse students' code for the beginner programmer class and 
-             generate thoughtful multiple-choice questions that can help them understand and improve their coding skills. 
-             You should try and make good distractor options to really test students understanding.
+             "content": '''You are an educational assistant specializing in computer science. Your task is to analyse 
+             students' code for the beginner programmer class and generate thoughtful multiple-choice questions that 
+             can help them understand and improve their coding skills. You should try and make good distractor 
+             options to really test students understanding.
 
     The student will provide a json with the following:
     How many questions they want under "question_count",
@@ -244,14 +145,9 @@ def generate_ai_questions(user_data):
              }
         ]
     )
-    # print(completion.choices[0].message.content)
 
     data = json.loads(completion.choices[0].message.content)
-    # data = json.loads(sample)
-    quiz = from_dict(data)
+
+    quiz = from_dict(data)  # load returned json questions to python objects
 
     return quiz
-
-# print(completion.choices[0].message)
-#
-# print(completion.choices[0].message.content)
