@@ -5,10 +5,6 @@ const url = '/generate_questions';
 let currentAttemptID:number | null = null;
 
 $(document).ready(function() {
-            $('#crui_check_answers').on("click", function () {
-                evaluate_answers();
-            });
-
             $('#crui_generated_question_holder').removeClass("visually-hidden");
             $('#code-form').submit(function(event) {
                 event.preventDefault();
@@ -155,83 +151,3 @@ check
 </span>`;
 }
 
-function saveAnswer(studentAnswer:string, questionID:number): void {
-    // Retrieve current answers from session storage
-    const answers: StudentAnswer[] = JSON.parse(sessionStorage.getItem('crui_answers') || '[]');
-    const stupidArray: any = answers;
-    // Check if the answer already exists
-    let existingAnswerIndex = stupidArray.findIndex((answer:StudentAnswer) => answer.question.ID === questionID)
-
-    if (existingAnswerIndex !== -1) {
-        // Update existing answer
-        answers[existingAnswerIndex].studentAnswer = studentAnswer;
-    } else {
-        // Add new answer
-        const questions = JSON.parse(sessionStorage.getItem('crui_questions') || '[]');
-        const questionIndex = questions.findIndex((question:Question) => question.ID === questionID);
-
-         if(questionIndex !== -1){
-             const studentAnswerObject:StudentAnswer = {question: questions[questionIndex], studentAnswer: studentAnswer};
-              answers.push(studentAnswerObject);
-         }else{
-             console.log("No Question found of id:"+questionID);
-         }
-
-    }
-
-    // Save back to session storage
-    sessionStorage.setItem('crui_answers', JSON.stringify(answers));
-}
-
-
-function evaluate_answers() {
-    let answers: StudentAnswer[] = JSON.parse(sessionStorage.getItem('crui_answers') || '[]');
-    const questions:Question[] = JSON.parse(sessionStorage.getItem('crui_questions') || '[]');
-    //get questions student didnt answer
-
-    const answerIDs = new Set(answers.map(answer => answer.question.ID))
-    const nonAnsweredQuestions = questions.filter(question => !answerIDs.has(question.ID));
-
-    const unansweredStudentAnswers:StudentAnswer[] = nonAnsweredQuestions.map(question => {return {question: question, studentAnswer: null}})
-
-    answers.push(...unansweredStudentAnswers);
-
-    //Sort answers by id
-    answers = answers.sort((a, b) => a.question.ID - b.question.ID);
-
-    //show results of answers
-    $('#questions').empty();
-    answers.forEach((studentAnswer, index)=>generate_answer(studentAnswer, index+1));
-    console.log(JSON.stringify(answers));
-    if(currentAttemptID != null){
-            saveStudentAnswersToDB(answers, currentAttemptID);
-    }
-
-}
-
-async function saveStudentAnswersToDB(data:StudentAnswer[], attemptID:number) {
-  const url = baseURL+'/saveanswers/'+attemptID; // Replace with your URL
-
-  // Define the payload
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    });
-
-    // Check if the response is okay
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    console.log('Response:', result);
-  } catch (error) {
-    console.error('Error:', error);
-  }
-  return Promise.resolve();
-}
