@@ -2,10 +2,11 @@ import {Question, StudentAnswer} from "./formTypes";
 import {generate_answer, generate_question} from "./formMaker.js";
 
 
-// const baseURL = "http://127.0.0.1:5000";
-const url = 'https://devweb2023.cis.strath.ac.uk/xbb21163-python/generate_questions';
+//request questions to be generated on page load
+let url:string;
 let currentAttemptID:number | null = null;
 $(document).ready(function() {
+    url = $('#crui_server_host_url').text()+'generate_questions';
     const data = {
                     crui_username: $('#crui_username').text(),
                     crui_student_email: $('#crui_student_email').text(),
