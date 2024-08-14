@@ -331,8 +331,9 @@ def generate_questions_route():
     "question_topics": str | None - Comma seperated values of question topics. Have None if we are wanting to use default,
     "code_context": str | None - the conext of the "code_snippet" or the code stored in the `crui_previous_question_id`,
     "question_count": str | None - the number of questions for the AI to generate. None will use default,
-    "generation_mode": boolean | None - generation mode will ignore all previous saved questions generated and will
-    always generate questions when set to `True`. This is recommended for testing only. Default is False.
+    "generation_mode": boolean | None - generation mode will generate new questions if code submitted to the code
+    accepter question is different from the code used to previously generate else it will return previous
+    answers/questions. This happens when set to `True`. This is recommended for testing only. Default is False.
     }
 
 
