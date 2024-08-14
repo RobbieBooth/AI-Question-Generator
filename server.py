@@ -14,7 +14,7 @@ from flask import Flask, render_template, session, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 
 from sqlalchemy.sql import func
-from sqlalchemy import text, PrimaryKeyConstraint
+from sqlalchemy import text, PrimaryKeyConstraint, update
 
 from flask_cors import CORS
 import QuestionGeneration
@@ -22,7 +22,6 @@ import QuestionGeneration
 ENV_FILE = find_dotenv()
 if ENV_FILE:
     load_dotenv(ENV_FILE)
-
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = \
@@ -77,6 +76,7 @@ class StudentSubmittedCode(db.Model):
     codeRunnerStudentID = db.Column(db.Integer, nullable=False)
     studentUsername = db.Column(db.String(30), nullable=False)
     studentEmail = db.Column(db.String(255), nullable=True)
+    new_code_from_last_generation = db.Column(db.Boolean, nullable=False, default=True)
     linkedCodeQuestionID = db.Column(db.Integer, db.ForeignKey('code_question.id'), nullable=False)
 
     # Define relationships
@@ -209,21 +209,43 @@ def add_question(attemptID, question: str, answer: str, wrong_options: list[str]
     return new_question
 
 
-def get_code_from_previous_submission(student_username, code_runner_previous_question_id) -> str | None:
+# -> (str, bool) | (None, None)
+def get_code_from_previous_submission(student_username, code_runner_previous_question_id):
     '''
-    Searches the database for the code that was last submitted for the student_username and code_runner_previous_question_id
-    :param student_username: string representing the student unique username e.g: xcc21164
-    :param code_runner_previous_question_id: the code runner question id for the previous question which submitted the code
-    :return: a string representing the code that was submitted or none if the row was not found in database
+    Searches the database for the code that was last submitted for the student_username and
+    code_runner_previous_question_id
+    :param student_username: string representing the student unique username e.g:
+    xcc21164
+    :param code_runner_previous_question_id: the code runner question id for the previous question which
+    submitted the code
+    :return: a string representing the code that was submitted and a boolean signifying if the
+    code has been used to generate before otherwise `none` if the row was not found in database
     '''
     result = StudentSubmittedCode.query.filter_by(
         studentUsername=student_username,
         linkedCodeQuestionID=code_runner_previous_question_id
     ).first()
     if result:
-        return result.codeSubmitted
+        return result.codeSubmitted, result.new_code_from_last_generation
     else:
-        return None
+        return None, None
+
+
+def update_code_used_to_generate(student_username, code_runner_previous_question_id):
+    '''
+    Updates the `new_code_from_last_generation` field of the `StudentSubmittedCode` to `False` for the given student_username and code_runner_previous_question_id
+    :param student_username: string representing the student unique username e.g: xcc21164
+    :param code_runner_previous_question_id: The code runner question id for the previous question which
+    submitted the code
+    '''
+    query = (
+        update(StudentSubmittedCode)
+        .where(StudentSubmittedCode.studentUsername == student_username)
+        .where(StudentSubmittedCode.linkedCodeQuestionID == code_runner_previous_question_id)
+        .values(new_code_from_last_generation=False)
+    )
+    db.session.execute(query)
+    db.session.commit()
 
 
 def get_questions_from_database(attempt_id) -> QuestionGeneration.Question_Bank:
@@ -350,13 +372,16 @@ def generate_questions_route():
         code_template = existing_code_question.template
         code_language = existing_code_question.language
 
-    # Only check database if we are wanting old generations or answers
-    if not generation_mode:
-        # Query to find the ID
+    if code_snippet is None or len(code_snippet) == 0:
+        code_snippet, new_code = get_code_from_previous_submission(student_username, code_runner_previous_question_id)
+
+    # Only check database if we are wanting old generations or answers, or if we are generation_mode is true then we only regenerate if new code is provided
+    if not generation_mode or (new_code is not None and new_code == False):
+        # Query to find the ID - sorts by most recent
         result = db.session.query(StudentTaskAttempt.ID, StudentTaskAttempt.attempted).filter(
             StudentTaskAttempt.codeRunnerQuestionID == code_runner_question_id,
             StudentTaskAttempt.studentUsername == student_username
-        ).first()
+        ).order_by(StudentTaskAttempt.Timestamp.desc()).first()
 
         # If questions have already been generated get them
         if result is not None:
@@ -367,9 +392,6 @@ def generate_questions_route():
             else:
                 student_questions = get_questions_from_database(attempt_id).to_student_dict(encrypt_answers=False)
             return jsonify(questions=student_questions, attempt_id=attempt_id, answered=attempted)
-
-    if code_snippet is None or len(code_snippet) == 0:
-        code_snippet = get_code_from_previous_submission(student_username, code_runner_previous_question_id)
 
     # Code is still null so must not have been completed yet
     if code_snippet is None or len(code_snippet) == 0:
@@ -390,6 +412,7 @@ def generate_questions_route():
     }
 
     questions = generate_ai_questions(data)
+    update_code_used_to_generate(student_username, code_runner_previous_question_id)
     for question in questions.questions:
         new_question = add_question(student_attempt.ID, question.question, question.answer_option,
                                     question.wrong_options)
@@ -482,11 +505,12 @@ def insert_or_update_code(code_runner_question_id, code_runner_student_id, stude
     :param student_email: the email of the student - not required
     """
     query = text("""
-        INSERT INTO student_submitted_code (linkedCodeQuestionID, codeRunnerStudentID, studentUsername, codeSubmitted, studentEmail)
-        VALUES (:code_runner_question_id, :code_runner_student_id, :student_username, :code_submitted, :student_email)
+        INSERT INTO student_submitted_code (linkedCodeQuestionID, codeRunnerStudentID, studentUsername, codeSubmitted, studentEmail, new_code_from_last_generation)
+        VALUES (:code_runner_question_id, :code_runner_student_id, :student_username, :code_submitted, :student_email, TRUE)
         ON DUPLICATE KEY UPDATE
             codeSubmitted = VALUES(codeSubmitted),
-            studentEmail = VALUES(studentEmail)
+            studentEmail = VALUES(studentEmail),
+            new_code_from_last_generation = TRUE;
     """)
 
     db.session.execute(query, {
