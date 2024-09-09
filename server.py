@@ -436,6 +436,47 @@ def home():
     return render_template("home.html")
 
 
+@app.route('/summary/<int:attemptID>', methods=['GET'])
+def summary(attemptID):
+    if attemptID is None:
+        return "AttemptID must not be empty", 404
+    task_attempt: StudentTaskAttempt | None = StudentTaskAttempt.query.filter_by(ID=attemptID).first()
+
+    if task_attempt is None:
+        return "Attempt not found", 404
+
+    student_questions = get_questions_from_database(task_attempt.ID).to_student_dict(encrypt_answers=False)
+    code = task_attempt.CodeUsedToGenerate  # Get the code from the DB
+    questions_correct = task_attempt.questionsCorrect
+    timestamp = task_attempt.Timestamp
+    student_username = task_attempt.studentUsername
+    attempted = task_attempt.attempted
+
+    return render_template(
+        'summary.html',
+        code=code,
+        questions=student_questions,
+        attemptID=attemptID,
+        questions_correct=questions_correct,
+        timestamp=timestamp,
+        student_username=student_username,
+        attempted=attempted
+    )
+
+
+# Route for the new page with attempts by codeRunnerQuestionID
+@app.route('/attempts/<int:codeRunnerQuestionID>')
+def attempts(codeRunnerQuestionID):
+    # Query for all attempts with the given codeRunnerQuestionID
+    all_attempts = StudentTaskAttempt.query.filter_by(codeRunnerQuestionID=codeRunnerQuestionID).order_by(StudentTaskAttempt.Timestamp.desc()).all()
+
+    return render_template(
+        'attempts.html',
+        codeRunnerQuestionID=codeRunnerQuestionID,
+        attempts=all_attempts
+    )
+
+
 @app.route('/saveanswers/<int:id>', methods=['POST'])
 def saveanswers(id):
     """
