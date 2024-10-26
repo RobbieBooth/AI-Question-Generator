@@ -1,4 +1,5 @@
 import json
+import re
 
 from openai import OpenAI
 from dotenv import find_dotenv, load_dotenv
@@ -17,7 +18,7 @@ client = OpenAI(
 
 
 class Question:
-    def __init__(self, question: str, answer_option: str, wrong_options, ID=None, student_answer=None):
+    def __init__(self, question: str, answer_option: str, wrong_options:list[str], ID=None, student_answer=None):
         self.question = question
         self.answer_option = answer_option
         self.wrong_options = wrong_options
@@ -47,16 +48,31 @@ class Question:
         :return: a JSON object of the question
         """
         # randomise option order
-        options = self.wrong_options
-        options.append(self.answer_option)
+        # options = self.wrong_options
+        # options.append(self.answer_option)
+        options = [sanitize(opt) for opt in self.wrong_options]  # Sanitize wrong options
+        options.append(sanitize(self.answer_option))  # Sanitize and add answer option
+
         random.shuffle(options)
         options.append("This question doesn't seem right?")
+
+        if not encrypt_answer:
+            answer = sanitize(self.answer_option)
+        else:
+            answer = encrypt_data(sanitize(self.answer_option))
+
+        # Student Answer
+        if self.student_answer is None:
+            student_answer = None
+        else:
+            student_answer = sanitize(self.student_answer)
+
         return {
             "ID": self.ID,
-            "question": self.question,
+            "question": sanitize(self.question),
             "options": options,
-            "answer": self.answer_option if not encrypt_answer else encrypt_data(self.answer_option),
-            "studentAnswer": self.student_answer
+            "answer": answer,
+            "studentAnswer": student_answer
         }
 
 
@@ -91,6 +107,37 @@ def from_dict(data):
 def from_dict_with_id(data):
     questions = [Question(q['question'], q['answerOption'], q['wrongOptions'], q['id']) for q in data['questions']]
     return Question_Bank(questions)
+
+
+def sanitize(string: str) -> str:
+    char_map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#x27;',
+        '/': '&#x2F;',
+    }
+
+    pattern = re.compile(r'[&<>"\'/]')
+
+    return pattern.sub(lambda match: char_map[match.group(0)], string)
+
+import re
+
+def desanitize(string: str) -> str:
+    reverse_char_map = {
+        '&amp;': '&',
+        '&lt;': '<',
+        '&gt;': '>',
+        '&quot;': '"',
+        '&#x27;': "'",
+        '&#x2F;': '/',
+    }
+
+    pattern = re.compile(r'&amp;|&lt;|&gt;|&quot;|&#x27;|&#x2F;')
+
+    return pattern.sub(lambda match: reverse_char_map[match.group(0)], string)
 
 
 def generate_ai_questions(user_data) -> Question_Bank:

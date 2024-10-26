@@ -6,7 +6,7 @@ site.addsitedir(vendor_path)
 
 import json
 
-from QuestionGeneration import generate_ai_questions
+from QuestionGeneration import generate_ai_questions, desanitize
 from os import environ as env
 
 from dotenv import find_dotenv, load_dotenv
@@ -523,7 +523,7 @@ def saveanswers(id):
         if (answer['studentAnswer'] == "This question doesn't seem right?"):
             db.session.execute(text(query_for_not_right), {'question_id': answer['question']['ID']})
         db.session.execute(text(query),
-                           {'question_id': answer['question']['ID'], 'answerText': answer['studentAnswer']})
+                           {'question_id': answer['question']['ID'], 'answerText': desanitize(answer['studentAnswer'])})
 
     query_questions_correct = """
     UPDATE `student_task_attempt` SET questionsCorrect = (SELECT COUNT(*) as correct FROM `question` WHERE StudentAnswer = Answer AND attemptID = :attempt_id), attempted = TRUE WHERE ID = :attempt_id; 
