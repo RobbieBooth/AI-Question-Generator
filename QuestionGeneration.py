@@ -75,6 +75,41 @@ class Question:
             "studentAnswer": student_answer
         }
 
+    def to_student_dict_unsanitised(self, encrypt_answer: bool = False):
+        """
+        Converts the question to JSON object and randomises the order of the options.
+        THIS IS ONLY FOR SUMMARY PAGE TO FIX SANITISED DISPLAY ERROR
+        :param encrypt_answer: a bool whether to encrypt the answer
+        :return: a JSON object of the question
+        """
+        # randomise option order
+        # options = self.wrong_options
+        # options.append(self.answer_option)
+        options = [desanitize(opt) for opt in self.wrong_options]
+        options.append(desanitize(self.answer_option))  # Sanitize and add answer option
+
+        random.shuffle(options)
+        options.append("This question doesn't seem right?")
+
+        if not encrypt_answer:
+            answer = desanitize(self.answer_option)
+        else:
+            answer = encrypt_data(desanitize(self.answer_option))
+
+        # Student Answer
+        if self.student_answer is None:
+            student_answer = None
+        else:
+            student_answer = desanitize(self.student_answer)
+
+        return {
+            "ID": self.ID,
+            "question": desanitize(self.question),
+            "options": options,
+            "answer": answer,
+            "studentAnswer": student_answer
+        }
+
 
 class Question_Bank:
     def __init__(self, questions: list[Question]):
@@ -96,6 +131,17 @@ class Question_Bank:
         """
         self.questions.sort(key=lambda question: question.get_ID())
         student_questions = [question.to_student_dict(encrypt_answers) for question in self.questions]
+        return student_questions
+
+    def to_student_dict_unsanitised(self, encrypt_answers: bool = False):
+        """
+        Sorts the questions by ID and converts them into JSON data
+        THIS IS ONLY FOR SUMMARY PAGE TO FIX SANITISED DISPLAY ERROR
+        :param encrypt_answers: bool to determine whether to encrypt the answers of the JSON
+        :return: A JSON array containing all the questions
+        """
+        self.questions.sort(key=lambda question: question.get_ID())
+        student_questions = [question.to_student_dict_unsanitised(encrypt_answers) for question in self.questions]
         return student_questions
 
 

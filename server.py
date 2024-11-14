@@ -445,7 +445,7 @@ def summary(attemptID):
     if task_attempt is None:
         return "Attempt not found", 404
 
-    student_questions = get_questions_from_database(task_attempt.ID).to_student_dict(encrypt_answers=False)
+    student_questions = get_questions_from_database(task_attempt.ID).to_student_dict_unsanitised(encrypt_answers=False)
     code = task_attempt.CodeUsedToGenerate  # Get the code from the DB
     questions_correct = task_attempt.questionsCorrect
     timestamp = task_attempt.Timestamp
