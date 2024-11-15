@@ -3,7 +3,7 @@
 
 # AutoMCQ: Automatic Multi-Choice Question Generation Using GPT-4o Mini
 
-Welcome to the repository for **AutoMCQ**, a research internship project that leverages OpenAI's GPT-4o Mini model to generate high-quality multiple-choice questions based on student code submissions, specific question counts, and contextual understanding of the code.
+Welcome to the repository for **AutoMCQ**, a research internship project that leverages OpenAI's GPT-4o Mini model to generate multiple-choice questions based on student code submissions, specific question counts, and contextual understanding of the code.
 
 ## Overview
 
